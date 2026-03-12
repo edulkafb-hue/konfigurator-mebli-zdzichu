@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CABINET_TYPES, CABINET_CATEGORIES } from './config/cabinets';
 import { MATERIALS, MATERIAL_CATEGORIES, BACK_TYPES, EDGE_TYPES, LEG_OPTIONS, HINGE_OPTIONS } from './config/materials';
 
@@ -6,9 +6,9 @@ import { MATERIALS, MATERIAL_CATEGORIES, BACK_TYPES, EDGE_TYPES, LEG_OPTIONS, HI
 // KONFIGURACJA - ZMIEŃ NA SWOJE DANE
 // ============================================================================
 const CONFIG = {
-  companyName: 'Meble Na Wymiar',
-  companyEmail: 'zamowienia@twojafirma.pl',
-  companyPhone: '+48 123 456 789',
+  companyName: 'Zdzichu SAID Meble',
+  companyEmail: 'slawomirwosiek@gmail.com',
+  companyPhone: '+48 515 245 845',
   deliveryDays: '5-7 dni roboczych',
   freeDeliveryFrom: 0,
 };
@@ -53,6 +53,23 @@ const useCalculatePrice = (config) => {
     const total = Object.values(breakdown).reduce((a, b) => a + b, 0);
     return { breakdown, total };
   }, [config]);
+};
+
+// ============================================================================
+// HOOK SCROLL DETECTION
+// ============================================================================
+const useScrolled = (threshold = 50) => {
+  const [scrolled, setScrolled] = useState(false);
+  
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > threshold);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [threshold]);
+  
+  return scrolled;
 };
 
 // ============================================================================
@@ -136,9 +153,9 @@ const Section = ({ title, children, defaultOpen = true }) => {
 };
 
 // ============================================================================
-// PODGLĄD SZAFKI - POPRAWIONY!
+// PODGLĄD SZAFKI - Z WIDOCZNYMI PÓŁKAMI
 // ============================================================================
-const CabinetPreview = ({ config }) => {
+const CabinetPreview = ({ config, compact = false }) => {
   const { width, height, depth, material, frontMaterial, shelves, hasFronts, legs, type } = config;
   
   const mat = MATERIALS.find(m => m.id === material);
@@ -146,41 +163,31 @@ const CabinetPreview = ({ config }) => {
   const leg = LEG_OPTIONS.find(l => l.id === legs);
   const cabinetType = CABINET_TYPES.find(t => t.id === type);
   
-  // Sprawdź kategorię szafki
+  // Kategoria szafki
   const isTop = cabinetType?.category === 'górne' || type.includes('top');
   const isTall = cabinetType?.category === 'słupki' || type.includes('tall');
   const isBottom = !isTop && !isTall;
   
-  // Wymiary podglądu - dostosowane do typu
-  const maxW = 260;
-  const maxH = isTall ? 320 : 240;
+  // Wymiary - mniejsze dla compact mode
+  const maxW = compact ? 140 : 260;
+  const maxH = compact ? (isTall ? 120 : 80) : (isTall ? 320 : 240);
   
-  // Skalowanie proporcjonalne
-  const scale = Math.min(maxW / width, maxH / height) * 0.55;
+  const scale = Math.min(maxW / width, maxH / height) * (compact ? 0.7 : 0.55);
   const w = width * scale;
   const h = height * scale;
-  const d = depth * scale * 0.25;
+  const d = depth * scale * (compact ? 0.2 : 0.25);
   
-  // Nóżki tylko dla dolnych i słupków
   const showLegs = isBottom || isTall;
   const legH = showLegs ? (leg?.height || 0) * scale * 0.35 : 0;
+  const showCountertop = isBottom && !compact;
+  const countertopH = showCountertop ? 10 : 0;
   
-  // Blat nad szafką dolną
-  const showCountertop = isBottom;
-  const countertopH = showCountertop ? 12 : 0;
-  
-  // Ściana za szafką górną
-  const showWallMount = isTop;
-  
-  // Pozycja
   const offX = (maxW - w) / 2 + d/2;
-  const offY = showWallMount ? 30 : (maxH - h - legH - countertopH) / 2 + 10;
+  const offY = compact ? 5 : (isTop ? 25 : (maxH - h - legH - countertopH) / 2 + 5);
   
-  // Kolory
   const baseColor = mat?.color || '#E8DFD0';
   const frontColor = hasFronts ? (frontMat?.color || baseColor) : baseColor;
   
-  // Funkcja rozjaśniania/ciemnienia
   const adjustColor = (hex, percent) => {
     const num = parseInt(hex.replace('#', ''), 16);
     const amt = Math.round(2.55 * percent);
@@ -190,114 +197,90 @@ const CabinetPreview = ({ config }) => {
     return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
   };
   
-  // Półki wewnętrzne (widoczne gdy brak frontów)
+  // Pozycje półek - ZAWSZE obliczane
   const shelfPositions = [];
-  if (shelves > 0 && !hasFronts) {
+  if (shelves > 0) {
     const spacing = h / (shelves + 1);
     for (let i = 1; i <= shelves; i++) {
       shelfPositions.push(spacing * i);
     }
   }
   
-  // Podział drzwi dla wysokich szafek
   const doorDivisions = isTall ? 2 : (width > 500 ? 2 : 1);
   
+  // Unikalne ID dla gradientów
+  const uid = compact ? 'c' : 'f';
+  
   return (
-    <div className="bg-gradient-to-b from-stone-50 to-stone-100 rounded-2xl sm:rounded-3xl p-4 sm:p-5 border border-stone-200">
-      {/* Nazwa typu */}
-      <div className="text-center mb-2 sm:mb-3">
-        <span className="inline-block px-3 py-1 bg-white rounded-full text-xs sm:text-sm font-medium text-stone-600 border border-stone-200">
-          {cabinetType?.name || 'Szafka'}
-        </span>
-      </div>
+    <div className={`bg-gradient-to-b from-stone-50 to-stone-100 rounded-2xl ${compact ? 'p-2' : 'sm:rounded-3xl p-4 sm:p-5'} border border-stone-200`}>
+      {/* Nazwa typu - tylko w pełnym widoku */}
+      {!compact && (
+        <div className="text-center mb-2 sm:mb-3">
+          <span className="inline-block px-3 py-1 bg-white rounded-full text-xs sm:text-sm font-medium text-stone-600 border border-stone-200">
+            {cabinetType?.name || 'Szafka'}
+          </span>
+        </div>
+      )}
       
-      <svg viewBox={`0 0 ${maxW} ${maxH}`} className="w-full h-auto" style={{ maxHeight: isTall ? '280px' : '200px' }}>
+      <svg viewBox={`0 0 ${maxW} ${maxH}`} className="w-full h-auto" style={{ maxHeight: compact ? '100px' : (isTall ? '280px' : '200px') }}>
         <defs>
-          {/* Gradient frontu */}
-          <linearGradient id="frontGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id={`frontGrad${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor={adjustColor(frontColor, 10)} />
             <stop offset="100%" stopColor={adjustColor(frontColor, -10)} />
           </linearGradient>
-          {/* Gradient boku */}
-          <linearGradient id="sideGrad" x1="100%" y1="0%" x2="0%" y2="0%">
+          <linearGradient id={`sideGrad${uid}`} x1="100%" y1="0%" x2="0%" y2="0%">
             <stop offset="0%" stopColor={adjustColor(baseColor, -10)} />
             <stop offset="100%" stopColor={adjustColor(baseColor, -25)} />
           </linearGradient>
-          {/* Gradient góry */}
-          <linearGradient id="topGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+          <linearGradient id={`topGrad${uid}`} x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stopColor={baseColor} />
             <stop offset="100%" stopColor={adjustColor(baseColor, 15)} />
           </linearGradient>
-          {/* Gradient blatu */}
-          <linearGradient id="counterGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+          <linearGradient id={`counterGrad${uid}`} x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stopColor="#a8a29e" />
             <stop offset="100%" stopColor="#d6d3d1" />
           </linearGradient>
-          {/* Cień */}
-          <filter id="shadow" x="-20%" y="-10%" width="140%" height="130%">
-            <feDropShadow dx="0" dy="3" stdDeviation="5" floodColor="#78716c" floodOpacity="0.15"/>
+          <filter id={`shadow${uid}`} x="-20%" y="-10%" width="140%" height="130%">
+            <feDropShadow dx="0" dy="2" stdDeviation={compact ? 2 : 5} floodColor="#78716c" floodOpacity="0.15"/>
           </filter>
         </defs>
         
-        {/* Cień na podłodze (tylko dla dolnych i słupków) */}
-        {(isBottom || isTall) && (
-          <ellipse
-            cx={offX + w/2 - d/4}
-            cy={offY + h + legH + 8}
-            rx={w/2 + 10}
-            ry={5}
-            fill="#78716c"
-            opacity="0.1"
-          />
+        {/* Cień na podłodze */}
+        {(isBottom || isTall) && !compact && (
+          <ellipse cx={offX + w/2 - d/4} cy={offY + h + legH + 6} rx={w/2 + 8} ry={4} fill="#78716c" opacity="0.1" />
         )}
         
-        {/* Mocowanie ścienne (dla górnych) */}
-        {showWallMount && (
-          <g>
-            <rect x={offX - d - 5} y={offY - d - 15} width={w + d + 10} height={maxH - 20} fill="#f5f5f4" stroke="#e7e5e4" strokeWidth={1} rx={2} />
-            <text x={offX + w/2 - d/2} y={offY - d - 5} textAnchor="middle" fill="#a8a29e" fontSize="8">ściana</text>
-          </g>
-        )}
-        
-        <g filter="url(#shadow)">
-          {/* Nóżki (tylko dolne i słupki) */}
+        <g filter={`url(#shadow${uid})`}>
+          {/* Nóżki */}
           {showLegs && leg?.id !== 'none' && leg?.id !== 'plinth' && legH > 0 && (
             <>
-              <rect x={offX + 6} y={offY + h} width={5} height={legH} fill="#a8a29e" rx={1} />
-              <rect x={offX + w - 11} y={offY + h} width={5} height={legH} fill="#a8a29e" rx={1} />
+              <rect x={offX + 4} y={offY + h} width={compact ? 3 : 5} height={legH} fill="#a8a29e" rx={1} />
+              <rect x={offX + w - (compact ? 7 : 9)} y={offY + h} width={compact ? 3 : 5} height={legH} fill="#a8a29e" rx={1} />
             </>
           )}
           
           {/* Cokół */}
           {showLegs && leg?.id === 'plinth' && legH > 0 && (
-            <rect x={offX + 3} y={offY + h} width={w - 6} height={legH} fill={adjustColor(baseColor, -15)} stroke="#d6d3d1" strokeWidth={1} rx={1} />
+            <rect x={offX + 2} y={offY + h} width={w - 4} height={legH} fill={adjustColor(baseColor, -15)} stroke="#d6d3d1" strokeWidth={0.5} rx={1} />
           )}
           
           {/* Plecy szafki */}
-          <rect 
-            x={offX - d + 2} 
-            y={offY - d + 2} 
-            width={w - 4} 
-            height={h - 4} 
-            fill="#fafaf9" 
-            stroke="#e7e5e4" 
-            strokeWidth={1}
-          />
+          <rect x={offX - d + 1} y={offY - d + 1} width={w - 2} height={h - 2} fill="#fafaf9" stroke="#e7e5e4" strokeWidth={0.5} />
           
           {/* Bok lewy */}
           <polygon
             points={`${offX},${offY + h} ${offX},${offY} ${offX - d},${offY - d} ${offX - d},${offY + h - d}`}
-            fill="url(#sideGrad)"
+            fill={`url(#sideGrad${uid})`}
             stroke="#d6d3d1"
-            strokeWidth={1.5}
+            strokeWidth={1}
           />
           
           {/* Góra szafki */}
           <polygon
             points={`${offX},${offY} ${offX + w},${offY} ${offX + w - d},${offY - d} ${offX - d},${offY - d}`}
-            fill="url(#topGrad)"
+            fill={`url(#topGrad${uid})`}
             stroke="#d6d3d1"
-            strokeWidth={1.5}
+            strokeWidth={1}
           />
           
           {/* Front */}
@@ -306,44 +289,58 @@ const CabinetPreview = ({ config }) => {
             y={offY}
             width={w}
             height={h}
-            fill="url(#frontGrad)"
+            fill={`url(#frontGrad${uid})`}
             stroke="#c7c2bc"
-            strokeWidth={1.5}
-            rx={2}
+            strokeWidth={1}
+            rx={1}
           />
           
-          {/* Półki wewnętrzne (bez frontów) */}
-          {!hasFronts && shelfPositions.map((pos, i) => (
-            <rect 
-              key={i} 
-              x={offX + 4} 
-              y={offY + pos - 2} 
-              width={w - 8} 
-              height={4} 
-              fill={baseColor} 
-              stroke="#d6d3d1" 
-              strokeWidth={0.5}
-            />
+          {/* PÓŁKI - widoczne jako linie na froncie */}
+          {shelfPositions.map((pos, i) => (
+            <g key={i}>
+              {/* Linia półki widoczna przez front */}
+              <line
+                x1={offX + 2}
+                y1={offY + pos}
+                x2={offX + w - 2}
+                y2={offY + pos}
+                stroke={adjustColor(frontColor, -20)}
+                strokeWidth={compact ? 1 : 1.5}
+                strokeDasharray={hasFronts ? "4 2" : "0"}
+                opacity={hasFronts ? 0.5 : 1}
+              />
+              {/* Grubość półki (widok z boku) */}
+              {!compact && (
+                <line
+                  x1={offX - d + 2}
+                  y1={offY - d + pos * (1 - d/h)}
+                  x2={offX}
+                  y2={offY + pos}
+                  stroke={adjustColor(baseColor, -15)}
+                  strokeWidth={2}
+                />
+              )}
+            </g>
           ))}
           
-          {/* Podział drzwi */}
+          {/* Podział drzwi pionowy */}
           {hasFronts && doorDivisions === 2 && (
             <line 
               x1={offX + w/2} 
-              y1={offY + 3} 
+              y1={offY + 2} 
               x2={offX + w/2} 
-              y2={offY + h - 3} 
+              y2={offY + h - 2} 
               stroke="#a8a29e" 
-              strokeWidth={1.5}
+              strokeWidth={compact ? 1 : 1.5}
             />
           )}
           
           {/* Podział poziomy dla słupków */}
-          {hasFronts && isTall && (
+          {hasFronts && isTall && !compact && (
             <line 
-              x1={offX + 3} 
+              x1={offX + 2} 
               y1={offY + h * 0.4} 
-              x2={offX + w - 3} 
+              x2={offX + w - 2} 
               y2={offY + h * 0.4} 
               stroke="#a8a29e" 
               strokeWidth={1.5}
@@ -351,68 +348,108 @@ const CabinetPreview = ({ config }) => {
           )}
           
           {/* Uchwyty */}
-          {hasFronts && (
+          {hasFronts && !compact && (
             doorDivisions === 2 ? (
               <>
-                <rect x={offX + w/2 - 22} y={offY + h/2 - 2.5} width={16} height={5} fill="#78716c" rx={2.5} />
-                <rect x={offX + w/2 + 6} y={offY + h/2 - 2.5} width={16} height={5} fill="#78716c" rx={2.5} />
+                <rect x={offX + w/2 - 18} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} />
+                <rect x={offX + w/2 + 6} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} />
               </>
             ) : (
-              <rect x={offX + w - 24} y={offY + h/2 - 2.5} width={16} height={5} fill="#78716c" rx={2.5} />
+              <rect x={offX + w - 18} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} />
             )
           )}
           
-          {/* Blat (tylko dolne) */}
+          {/* Blat */}
           {showCountertop && (
             <>
               <polygon
-                points={`
-                  ${offX - 3},${offY - 2}
-                  ${offX + w + 3},${offY - 2}
-                  ${offX + w - d + 3},${offY - d - countertopH}
-                  ${offX - d - 3},${offY - d - countertopH}
-                `}
-                fill="url(#counterGrad)"
+                points={`${offX - 2},${offY - 1} ${offX + w + 2},${offY - 1} ${offX + w - d + 2},${offY - d - countertopH} ${offX - d - 2},${offY - d - countertopH}`}
+                fill={`url(#counterGrad${uid})`}
                 stroke="#a8a29e"
-                strokeWidth={1}
+                strokeWidth={0.5}
               />
-              <rect
-                x={offX - 3}
-                y={offY - countertopH - 2}
-                width={w + 6}
-                height={countertopH}
-                fill="#d6d3d1"
-                stroke="#a8a29e"
-                strokeWidth={1}
-              />
+              <rect x={offX - 2} y={offY - countertopH - 1} width={w + 4} height={countertopH} fill="#d6d3d1" stroke="#a8a29e" strokeWidth={0.5} />
             </>
           )}
         </g>
+        
+        {/* Liczba półek - badge w rogu */}
+        {shelves > 0 && (
+          <g>
+            <circle cx={offX + w - 8} cy={offY + 12} r={compact ? 6 : 8} fill="#92400e" />
+            <text x={offX + w - 8} y={offY + (compact ? 14 : 16)} textAnchor="middle" fill="white" fontSize={compact ? 8 : 10} fontWeight="bold">{shelves}</text>
+          </g>
+        )}
       </svg>
       
-      {/* Wymiary */}
-      <div className="mt-2 sm:mt-3 text-center text-xs sm:text-sm text-stone-500">
-        {width} × {height} × {depth} mm
-      </div>
-      
-      {/* Materiały */}
-      <div className="mt-3 space-y-1.5 sm:space-y-2">
-        <div className="flex items-center gap-2 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-2.5 sm:px-3 py-2 border border-stone-200">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg border border-stone-200 flex-shrink-0" style={{ backgroundColor: mat?.color }} />
-          <div className="flex-1 min-w-0">
-            <div className="text-[9px] sm:text-[10px] text-stone-400">Korpus</div>
-            <div className="text-[11px] sm:text-xs font-medium text-stone-700 truncate">{mat?.name}</div>
+      {/* Wymiary - tylko w pełnym widoku */}
+      {!compact && (
+        <>
+          <div className="mt-2 sm:mt-3 text-center text-xs sm:text-sm text-stone-500">
+            {width} × {height} × {depth} mm
           </div>
-        </div>
-        {hasFronts && (
-          <div className="flex items-center gap-2 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-2.5 sm:px-3 py-2 border border-stone-200">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg border border-stone-200 flex-shrink-0" style={{ backgroundColor: frontMat?.color }} />
-            <div className="flex-1 min-w-0">
-              <div className="text-[9px] sm:text-[10px] text-stone-400">Front</div>
-              <div className="text-[11px] sm:text-xs font-medium text-stone-700 truncate">{frontMat?.name}</div>
+          
+          {/* Materiały */}
+          <div className="mt-3 space-y-1.5 sm:space-y-2">
+            <div className="flex items-center gap-2 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-2.5 sm:px-3 py-2 border border-stone-200">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg border border-stone-200 flex-shrink-0" style={{ backgroundColor: mat?.color }} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[9px] sm:text-[10px] text-stone-400">Korpus</div>
+                <div className="text-[11px] sm:text-xs font-medium text-stone-700 truncate">{mat?.name}</div>
+              </div>
             </div>
+            {hasFronts && (
+              <div className="flex items-center gap-2 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-2.5 sm:px-3 py-2 border border-stone-200">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg border border-stone-200 flex-shrink-0" style={{ backgroundColor: frontMat?.color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[9px] sm:text-[10px] text-stone-400">Front</div>
+                  <div className="text-[11px] sm:text-xs font-medium text-stone-700 truncate">{frontMat?.name}</div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </>
+      )}
+      
+      {/* Compact info */}
+      {compact && (
+        <div className="mt-1 text-center">
+          <div className="text-[10px] text-stone-500 truncate">{width}×{height}×{depth}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// STICKY PREVIEW NA MOBILE
+// ============================================================================
+const StickyMobilePreview = ({ config, total }) => {
+  const scrolled = useScrolled(100);
+  const cabinetType = CABINET_TYPES.find(t => t.id === config.type);
+  
+  if (!scrolled) return null;
+  
+  return (
+    <div className="lg:hidden fixed top-[52px] left-0 right-0 z-20 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-md transition-all duration-300">
+      <div className="max-w-6xl mx-auto px-3 py-2 flex items-center gap-3">
+        {/* Mini podgląd */}
+        <div className="w-24 flex-shrink-0">
+          <CabinetPreview config={config} compact={true} />
+        </div>
+        
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-medium text-stone-700 truncate">{cabinetType?.name}</div>
+          <div className="text-[10px] text-stone-400">{config.width}×{config.height}×{config.depth} mm</div>
+          <div className="text-[10px] text-stone-400">Półki: {config.shelves}</div>
+        </div>
+        
+        {/* Cena */}
+        <div className="text-right flex-shrink-0">
+          <div className="text-lg font-bold text-amber-800">{total.toLocaleString('pl-PL')}</div>
+          <div className="text-[10px] text-stone-400">zł netto</div>
+        </div>
       </div>
     </div>
   );
@@ -559,14 +596,13 @@ ${CONFIG.companyEmail}
             </div>
           ) : (
             <>
-              {/* Podsumowanie */}
               <div className="bg-stone-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 mb-4 sm:mb-6">
                 <h3 className="font-semibold text-stone-700 mb-2 sm:mb-3 text-sm sm:text-base">Podsumowanie</h3>
                 <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
                   <div><span className="text-stone-400">Typ:</span> <span className="text-stone-700">{cabinetType?.name}</span></div>
                   <div><span className="text-stone-400">Wymiary:</span> <span className="text-stone-700">{config.width}×{config.height}×{config.depth}</span></div>
                   <div><span className="text-stone-400">Korpus:</span> <span className="text-stone-700">{mat?.name}</span></div>
-                  <div><span className="text-stone-400">Front:</span> <span className="text-stone-700">{config.hasFronts ? frontMat?.name : 'Brak'}</span></div>
+                  <div><span className="text-stone-400">Półki:</span> <span className="text-stone-700">{config.shelves} szt.</span></div>
                 </div>
                 <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-stone-200 flex justify-between items-center">
                   <span className="text-stone-500 text-sm">Cena netto:</span>
@@ -574,7 +610,6 @@ ${CONFIG.companyEmail}
                 </div>
               </div>
               
-              {/* Formularz */}
               <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-stone-600 mb-1">Imię i nazwisko *</label>
@@ -753,7 +788,6 @@ const PriceSummary = ({ config, onOrder }) => {
     <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-stone-200 shadow-2xl z-40">
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         <div className="flex items-center justify-between gap-3">
-          {/* Lewa strona - szczegóły (ukryte na mobile) */}
           <div className="hidden sm:flex items-center gap-6">
             <button onClick={() => setShowBreakdown(!showBreakdown)} className="flex items-center gap-2 text-stone-500 hover:text-stone-700 transition-colors">
               <div className={`transform transition-transform ${showBreakdown ? 'rotate-180' : ''}`}>{Icons.expand}</div>
@@ -766,7 +800,6 @@ const PriceSummary = ({ config, onOrder }) => {
             </div>
           </div>
           
-          {/* Prawa strona - cena i przycisk */}
           <div className="flex items-center gap-3 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end">
             <div className="text-left sm:text-right">
               <div className="text-[10px] sm:text-xs text-stone-400 uppercase tracking-wider">Razem</div>
@@ -774,7 +807,7 @@ const PriceSummary = ({ config, onOrder }) => {
             </div>
             <button onClick={() => onOrder(breakdown, total)} className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-amber-700 hover:bg-amber-800 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-amber-700/25 text-sm sm:text-base">
               {Icons.send}
-              <span className="hidden xs:inline">Złóż</span> <span>zamówienie</span>
+              <span>Zamów</span>
             </button>
           </div>
         </div>
@@ -814,6 +847,7 @@ export default function FurnitureCalculator() {
   });
   
   const [orderModal, setOrderModal] = useState({ open: false, breakdown: {}, total: 0 });
+  const { total } = useCalculatePrice(config);
   
   const handleOrder = (breakdown, total) => {
     setOrderModal({ open: true, breakdown, total });
@@ -840,16 +874,19 @@ export default function FurnitureCalculator() {
         </div>
       </header>
       
+      {/* Sticky mini preview na mobile */}
+      <StickyMobilePreview config={config} total={total} />
+      
       {/* Content */}
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Podgląd - na mobile NA GÓRZE */}
-          <div className="lg:col-span-1 lg:sticky lg:top-20 lg:self-start order-1 lg:order-1">
+          {/* Podgląd */}
+          <div className="lg:col-span-1 lg:sticky lg:top-20 lg:self-start">
             <CabinetPreview config={config} />
           </div>
           
           {/* Konfiguracja */}
-          <div className="lg:col-span-2 order-2 lg:order-2">
+          <div className="lg:col-span-2">
             <ConfigPanel config={config} setConfig={setConfig} />
           </div>
         </div>
