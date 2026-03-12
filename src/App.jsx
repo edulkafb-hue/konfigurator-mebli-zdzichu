@@ -155,9 +155,23 @@ const useGoogleSheetsData = () => {
         ]);
 
         const materials = parseCSV(materialsRes);
-        const cabinets = parseCSV(cabinetsRes);
+        const cabinetsRaw = parseCSV(cabinetsRes);
         const optionsRaw = parseCSV(optionsRes);
         const configRaw = parseCSV(configRes);
+        
+        // Konwersja wymiarów z cm na mm (CSV ma wartości w centymetrach)
+        const cabinets = cabinetsRaw.map(cab => ({
+          ...cab,
+          defaultWidth: (cab.defaultWidth || 60) * 10,
+          defaultHeight: (cab.defaultHeight || 72) * 10,
+          defaultDepth: (cab.defaultDepth || 56) * 10,
+          minWidth: (cab.minWidth || 30) * 10,
+          maxWidth: (cab.maxWidth || 120) * 10,
+          minHeight: (cab.minHeight || 50) * 10,
+          maxHeight: (cab.maxHeight || 100) * 10,
+          minDepth: (cab.minDepth || 28) * 10,
+          maxDepth: (cab.maxDepth || 65) * 10,
+        }));
 
         const options = {
           legs: optionsRaw.filter(o => o.type === 'legs'),
@@ -349,7 +363,7 @@ const CabinetPreview = ({ config, materials, cabinets, options, compact = false 
   const isOven = type.includes('oven') || type.includes('piekarnik');
   const isSink = type.includes('sink') || type.includes('zlew');
   const isFridge = type.includes('fridge') || type.includes('lodow');
-  const isCorner = type.includes('corner') || type.includes('narozn');
+  const isCorner = type.includes('corner') || type.includes('naroż') || type.includes('naroz');
   
   const maxW = compact ? 140 : 260;
   const maxH = compact ? (isTall ? 120 : 80) : (isTall ? 320 : 240);
@@ -602,9 +616,89 @@ const CabinetPreview = ({ config, materials, cabinets, options, compact = false 
     );
   };
   
+  // Renderowanie szafki narożnej (kształt L)
+  const renderCorner = () => {
+    if (!isCorner || !hasFronts) return null;
+    
+    // Narożna ma dwie połączone sekcje pod kątem
+    const section1W = w * 0.55;
+    const section2W = w * 0.55;
+    const cornerOffset = w * 0.15;
+    
+    // Czy ma karuzelę
+    const hasCarousel = type.includes('karuzela') || type.includes('carousel');
+    
+    return (
+      <g>
+        {/* Główna sekcja frontowa */}
+        <rect 
+          x={offX} 
+          y={offY} 
+          width={section1W} 
+          height={h} 
+          fill={`url(#fg${uid})`} 
+          stroke="#c7c2bc" 
+          strokeWidth={1} 
+          rx={1} 
+        />
+        
+        {/* Druga sekcja (pod kątem) */}
+        <polygon 
+          points={`
+            ${offX + section1W - 2},${offY}
+            ${offX + w},${offY - d/2}
+            ${offX + w},${offY + h - d/2}
+            ${offX + section1W - 2},${offY + h}
+          `}
+          fill={adjustColor(frontColor, -5)}
+          stroke="#c7c2bc"
+          strokeWidth={1}
+        />
+        
+        {/* Linia połączenia sekcji */}
+        <line 
+          x1={offX + section1W - 2} 
+          y1={offY + 2} 
+          x2={offX + section1W - 2} 
+          y2={offY + h - 2} 
+          stroke="#a8a29e" 
+          strokeWidth={1.5} 
+        />
+        
+        {/* Uchwyt głównej sekcji */}
+        {!compact && (
+          <rect 
+            x={offX + section1W/2 - 6} 
+            y={offY + h/2 - 2} 
+            width={12} 
+            height={4} 
+            fill="#78716c" 
+            rx={2} 
+          />
+        )}
+        
+        {/* Ikona karuzeli jeśli ma */}
+        {hasCarousel && !compact && (
+          <g>
+            <circle cx={offX + 15} cy={offY + h - 15} r={10} fill="white" stroke="#d6d3d1" strokeWidth={1} />
+            <text x={offX + 15} y={offY + h - 11} textAnchor="middle" fontSize={10}>🔄</text>
+          </g>
+        )}
+        
+        {/* Oznaczenie narożnej */}
+        {!compact && (
+          <g>
+            <circle cx={offX + section1W + (w - section1W)/2} cy={offY + 12 - d/4} r={8} fill="white" stroke="#d6d3d1" strokeWidth={1} />
+            <text x={offX + section1W + (w - section1W)/2} y={offY + 16 - d/4} textAnchor="middle" fontSize={9}>L</text>
+          </g>
+        )}
+      </g>
+    );
+  };
+  
   // Renderowanie standardowych drzwi
   const renderStandardDoors = () => {
-    if (isDrawer || isGlass || isHood || isOven || isFridge || isSink) return null;
+    if (isDrawer || isGlass || isHood || isOven || isFridge || isSink || isCorner) return null;
     if (!hasFronts) return null;
     
     const doubleDoor = width > 500;
@@ -646,7 +740,7 @@ const CabinetPreview = ({ config, materials, cabinets, options, compact = false 
   // Renderowanie korpusu bez frontów
   const renderOpenCorpus = () => {
     if (hasFronts && !isHood) return null;
-    if (isDrawer || isGlass || isOven || isFridge || isSink) return null;
+    if (isDrawer || isGlass || isOven || isFridge || isSink || isCorner) return null;
     
     return (
       <g>
@@ -698,6 +792,7 @@ const CabinetPreview = ({ config, materials, cabinets, options, compact = false 
           {renderOven()}
           {renderFridge()}
           {renderSink()}
+          {renderCorner()}
           {renderStandardDoors()}
           {renderOpenCorpus()}
         </g>
