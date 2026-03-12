@@ -4,17 +4,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 // GOOGLE SHEETS CONFIG - WKLEJ SWOJE LINKI
 // ============================================================================
 const SHEETS_CONFIG = {
-  // Zamień TWOJ_ID na ID swojego arkusza Google Sheets
-  // Format linku: https://docs.google.com/spreadsheets/d/TWOJ_ID/export?format=csv&gid=NUMER
-  // gid=0 to pierwsza zakładka, gid=1 druga, itd.
+  // Twoje linki Google Sheets (opublikowane jako CSV)
+  materials: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSwH04wgmMDxup-pommBxBIPpW-jxQZCk009ArHZnVcC5iY1CK0pNWQyE4jdWYRrcPBhEyeaDEnxmpP/pub?output=csv&gid=0',
+  cabinets: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSwH04wgmMDxup-pommBxBIPpW-jxQZCk009ArHZnVcC5iY1CK0pNWQyE4jdWYRrcPBhEyeaDEnxmpP/pub?output=csv&gid=1287459572',
+  options: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSwH04wgmMDxup-pommBxBIPpW-jxQZCk009ArHZnVcC5iY1CK0pNWQyE4jdWYRrcPBhEyeaDEnxmpP/pub?output=csv&gid=1579806458',
+  config: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSwH04wgmMDxup-pommBxBIPpW-jxQZCk009ArHZnVcC5iY1CK0pNWQyE4jdWYRrcPBhEyeaDEnxmpP/pub?output=csv&gid=250968456',
   
-  materials: 'https://docs.google.com/spreadsheets/d/1GUie3q6IBS16ZOEsWlPdmHI7ZGwurDE9QLFFyNyWmBQ/edit?gid=0#gid=0',
-  cabinets: 'https://docs.google.com/spreadsheets/d/1GUie3q6IBS16ZOEsWlPdmHI7ZGwurDE9QLFFyNyWmBQ/edit?gid=1287459572#gid=1287459572',
-  options: 'https://docs.google.com/spreadsheets/d/1GUie3q6IBS16ZOEsWlPdmHI7ZGwurDE9QLFFyNyWmBQ/edit?gid=1579806458#gid=1579806458',
-  config: 'https://docs.google.com/spreadsheets/d/1GUie3q6IBS16ZOEsWlPdmHI7ZGwurDE9QLFFyNyWmBQ/edit?gid=250968456#gid=250968456',
-  
-  // ⬇️ ZMIEŃ NA true GDY MASZ PRAWDZIWE LINKI ⬇️
-  useGoogleSheets: false,
+  // ✅ Włączone - dane pobierają się z Google Sheets
+  useGoogleSheets: true,
   
   // Cache w minutach
   cacheMinutes: 5,
@@ -330,7 +327,7 @@ const Section = ({ title, children, defaultOpen = true }) => {
 };
 
 // ============================================================================
-// PODGLĄD SZAFKI
+// PODGLĄD SZAFKI - ROZRÓŻNIA TYPY (szuflady, witryny, piekarnik, okap itd.)
 // ============================================================================
 const CabinetPreview = ({ config, materials, cabinets, options, compact = false }) => {
   const { width, height, depth, material, frontMaterial, shelves, hasFronts, legs, type } = config;
@@ -340,9 +337,19 @@ const CabinetPreview = ({ config, materials, cabinets, options, compact = false 
   const leg = options.legs.find(l => l.id === legs);
   const cabinetType = cabinets.find(t => t.id === type);
   
+  // Kategorie
   const isTop = cabinetType?.category === 'górne';
   const isTall = cabinetType?.category === 'słupki';
   const isBottom = !isTop && !isTall;
+  
+  // Typy specjalne - rozpoznawanie po ID
+  const isDrawer = type.includes('drawer') || type.includes('szuflad');
+  const isGlass = type.includes('glass') || type.includes('witryn');
+  const isHood = type.includes('hood') || type.includes('okap');
+  const isOven = type.includes('oven') || type.includes('piekarnik');
+  const isSink = type.includes('sink') || type.includes('zlew');
+  const isFridge = type.includes('fridge') || type.includes('lodow');
+  const isCorner = type.includes('corner') || type.includes('narozn');
   
   const maxW = compact ? 140 : 260;
   const maxH = compact ? (isTall ? 120 : 80) : (isTall ? 320 : 240);
@@ -368,13 +375,291 @@ const CabinetPreview = ({ config, materials, cabinets, options, compact = false 
     return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
   };
   
+  const uid = compact ? 'c' : 'f';
+  
+  // Liczba szuflad (jeśli typ szufladowy)
+  const drawerCount = isDrawer ? (height > 600 ? 4 : height > 400 ? 3 : 2) : 0;
+  
+  // Półki - tylko gdy nie szuflady
   const shelfY = [];
-  if (shelves > 0) {
+  if (shelves > 0 && !isDrawer) {
     const sp = h / (shelves + 1);
     for (let i = 1; i <= shelves; i++) shelfY.push(sp * i);
   }
   
-  const uid = compact ? 'c' : 'f';
+  // Renderowanie szuflad
+  const renderDrawers = () => {
+    if (!isDrawer || !hasFronts) return null;
+    const drawers = [];
+    const drawerH = (h - 4) / drawerCount;
+    const gap = 2;
+    
+    for (let i = 0; i < drawerCount; i++) {
+      const y = offY + 2 + i * drawerH;
+      drawers.push(
+        <g key={i}>
+          {/* Szuflada */}
+          <rect 
+            x={offX + 2} 
+            y={y + gap/2} 
+            width={w - 4} 
+            height={drawerH - gap} 
+            fill={`url(#fg${uid})`} 
+            stroke={adjustColor(frontColor, -15)} 
+            strokeWidth={1} 
+            rx={1} 
+          />
+          {/* Uchwyt szuflady */}
+          {!compact && (
+            <rect 
+              x={offX + w/2 - 15} 
+              y={y + drawerH/2 - 2} 
+              width={30} 
+              height={4} 
+              fill="#78716c" 
+              rx={2} 
+            />
+          )}
+          {compact && (
+            <rect 
+              x={offX + w/2 - 8} 
+              y={y + drawerH/2 - 1} 
+              width={16} 
+              height={2} 
+              fill="#78716c" 
+              rx={1} 
+            />
+          )}
+        </g>
+      );
+    }
+    return drawers;
+  };
+  
+  // Renderowanie witryny (szkło)
+  const renderGlass = () => {
+    if (!isGlass || !hasFronts) return null;
+    const glassMargin = compact ? 4 : 8;
+    const frameWidth = compact ? 3 : 5;
+    
+    return (
+      <g>
+        {/* Ramka */}
+        <rect 
+          x={offX} 
+          y={offY} 
+          width={w} 
+          height={h} 
+          fill={`url(#fg${uid})`} 
+          stroke="#c7c2bc" 
+          strokeWidth={1} 
+          rx={1} 
+        />
+        {/* Szkło */}
+        <rect 
+          x={offX + glassMargin} 
+          y={offY + glassMargin} 
+          width={w - glassMargin * 2} 
+          height={h - glassMargin * 2} 
+          fill="rgba(200, 220, 240, 0.3)" 
+          stroke={adjustColor(frontColor, -20)} 
+          strokeWidth={frameWidth} 
+          rx={1} 
+        />
+        {/* Odbłysk szkła */}
+        <line 
+          x1={offX + glassMargin + 5} 
+          y1={offY + glassMargin + 5} 
+          x2={offX + glassMargin + 5} 
+          y2={offY + h - glassMargin - 5} 
+          stroke="rgba(255,255,255,0.4)" 
+          strokeWidth={2} 
+        />
+        {/* Uchwyt */}
+        {!compact && (
+          <rect x={offX + w - 16} y={offY + h/2 - 2} width={10} height={4} fill="#78716c" rx={2} />
+        )}
+      </g>
+    );
+  };
+  
+  // Renderowanie okapowej
+  const renderHood = () => {
+    if (!isHood) return null;
+    const openingH = h * 0.5;
+    
+    return (
+      <g>
+        {/* Korpus górny */}
+        <rect 
+          x={offX} 
+          y={offY} 
+          width={w} 
+          height={h - openingH} 
+          fill={`url(#fg${uid})`} 
+          stroke="#c7c2bc" 
+          strokeWidth={1} 
+          rx={1} 
+        />
+        {/* Otwór na okap */}
+        <rect 
+          x={offX + 3} 
+          y={offY + h - openingH + 2} 
+          width={w - 6} 
+          height={openingH - 4} 
+          fill="#2a2a2a" 
+          stroke="#1a1a1a" 
+          strokeWidth={1} 
+          rx={1} 
+        />
+        {/* Kratka okapu */}
+        {!compact && (
+          <>
+            <line x1={offX + 8} y1={offY + h - openingH/2} x2={offX + w - 8} y2={offY + h - openingH/2} stroke="#3a3a3a" strokeWidth={1} />
+            <line x1={offX + 8} y1={offY + h - openingH/2 + 6} x2={offX + w - 8} y2={offY + h - openingH/2 + 6} stroke="#3a3a3a" strokeWidth={1} />
+            <line x1={offX + 8} y1={offY + h - openingH/2 - 6} x2={offX + w - 8} y2={offY + h - openingH/2 - 6} stroke="#3a3a3a" strokeWidth={1} />
+          </>
+        )}
+      </g>
+    );
+  };
+  
+  // Renderowanie piekarnika
+  const renderOven = () => {
+    if (!isOven || !hasFronts) return null;
+    const ovenTop = h * 0.35;
+    const ovenH = h * 0.35;
+    
+    return (
+      <g>
+        {/* Górna część - szafka */}
+        <rect x={offX} y={offY} width={w} height={ovenTop - 2} fill={`url(#fg${uid})`} stroke="#c7c2bc" strokeWidth={1} rx={1} />
+        {!compact && <rect x={offX + w/2 - 12} y={offY + ovenTop/2 - 2} width={24} height={4} fill="#78716c" rx={2} />}
+        
+        {/* Otwór na piekarnik */}
+        <rect x={offX + 3} y={offY + ovenTop} width={w - 6} height={ovenH} fill="#1a1a1a" stroke="#0a0a0a" strokeWidth={1} rx={2} />
+        {/* Szyba piekarnika */}
+        <rect x={offX + 8} y={offY + ovenTop + 5} width={w - 16} height={ovenH - 15} fill="#2d2d2d" stroke="#3d3d3d" strokeWidth={1} rx={1} />
+        {/* Odbłysk */}
+        {!compact && <line x1={offX + 12} y1={offY + ovenTop + 8} x2={offX + 12} y2={offY + ovenTop + ovenH - 12} stroke="rgba(255,255,255,0.15)" strokeWidth={2} />}
+        
+        {/* Dolna część - szuflada grzewcza */}
+        <rect x={offX} y={offY + ovenTop + ovenH + 2} width={w} height={h - ovenTop - ovenH - 4} fill={`url(#fg${uid})`} stroke="#c7c2bc" strokeWidth={1} rx={1} />
+        {!compact && <rect x={offX + w/2 - 12} y={offY + ovenTop + ovenH + (h - ovenTop - ovenH)/2 - 1} width={24} height={3} fill="#78716c" rx={1.5} />}
+      </g>
+    );
+  };
+  
+  // Renderowanie lodówki
+  const renderFridge = () => {
+    if (!isFridge) return null;
+    const topH = h * 0.25;
+    
+    return (
+      <g>
+        {/* Górna część (zamrażarka) */}
+        <rect x={offX} y={offY} width={w} height={topH - 2} fill={`url(#fg${uid})`} stroke="#c7c2bc" strokeWidth={1} rx={1} />
+        {!compact && <rect x={offX + w - 16} y={offY + topH/2 - 2} width={10} height={4} fill="#78716c" rx={2} />}
+        
+        {/* Otwór na lodówkę */}
+        <rect x={offX + 2} y={offY + topH} width={w - 4} height={h - topH - 2} fill="#1a1a1a" stroke="#0a0a0a" strokeWidth={1} rx={2} />
+        {/* Wnętrze */}
+        <rect x={offX + 6} y={offY + topH + 4} width={w - 12} height={h - topH - 10} fill="#252525" rx={1} />
+      </g>
+    );
+  };
+  
+  // Renderowanie zlewozmywakowej
+  const renderSink = () => {
+    if (!isSink || !hasFronts) return null;
+    const topOpenH = h * 0.15;
+    
+    return (
+      <g>
+        {/* Otwarta przestrzeń na górze (na zlew) */}
+        <rect x={offX + 2} y={offY + 2} width={w - 4} height={topOpenH} fill="#fafaf9" stroke="#e7e5e4" strokeWidth={1} rx={1} />
+        
+        {/* Drzwiczki poniżej */}
+        <rect x={offX} y={offY + topOpenH + 4} width={w} height={h - topOpenH - 6} fill={`url(#fg${uid})`} stroke="#c7c2bc" strokeWidth={1} rx={1} />
+        
+        {/* Podział na 2 drzwi jeśli szerokie */}
+        {width > 600 && (
+          <line x1={offX + w/2} y1={offY + topOpenH + 6} x2={offX + w/2} y2={offY + h - 4} stroke="#a8a29e" strokeWidth={1.5} />
+        )}
+        
+        {/* Uchwyty */}
+        {!compact && (
+          width > 600 ? (
+            <>
+              <rect x={offX + w/2 - 18} y={offY + topOpenH + (h - topOpenH)/2} width={12} height={4} fill="#78716c" rx={2} />
+              <rect x={offX + w/2 + 6} y={offY + topOpenH + (h - topOpenH)/2} width={12} height={4} fill="#78716c" rx={2} />
+            </>
+          ) : (
+            <rect x={offX + w - 18} y={offY + topOpenH + (h - topOpenH)/2} width={12} height={4} fill="#78716c" rx={2} />
+          )
+        )}
+      </g>
+    );
+  };
+  
+  // Renderowanie standardowych drzwi
+  const renderStandardDoors = () => {
+    if (isDrawer || isGlass || isHood || isOven || isFridge || isSink) return null;
+    if (!hasFronts) return null;
+    
+    const doubleDoor = width > 500;
+    
+    return (
+      <g>
+        <rect x={offX} y={offY} width={w} height={h} fill={`url(#fg${uid})`} stroke="#c7c2bc" strokeWidth={1} rx={1} />
+        
+        {/* Podział na 2 drzwi */}
+        {doubleDoor && (
+          <line x1={offX + w/2} y1={offY + 2} x2={offX + w/2} y2={offY + h - 2} stroke="#a8a29e" strokeWidth={1.5} />
+        )}
+        
+        {/* Podział poziomy dla słupków */}
+        {isTall && !compact && (
+          <line x1={offX + 2} y1={offY + h * 0.4} x2={offX + w - 2} y2={offY + h * 0.4} stroke="#a8a29e" strokeWidth={1.5} />
+        )}
+        
+        {/* Uchwyty */}
+        {!compact && (
+          doubleDoor ? (
+            <>
+              <rect x={offX + w/2 - 18} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} />
+              <rect x={offX + w/2 + 6} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} />
+            </>
+          ) : (
+            <rect x={offX + w - 18} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} />
+          )
+        )}
+        
+        {/* Półki wewnętrzne (prześwitujące) */}
+        {shelfY.map((pos, i) => (
+          <line key={i} x1={offX + 2} y1={offY + pos} x2={offX + w - 2} y2={offY + pos} stroke={adjustColor(frontColor, -20)} strokeWidth={1.5} strokeDasharray="4 2" opacity={0.5} />
+        ))}
+      </g>
+    );
+  };
+  
+  // Renderowanie korpusu bez frontów
+  const renderOpenCorpus = () => {
+    if (hasFronts && !isHood) return null;
+    if (isDrawer || isGlass || isOven || isFridge || isSink) return null;
+    
+    return (
+      <g>
+        <rect x={offX} y={offY} width={w} height={h} fill="#fafaf9" stroke="#d6d3d1" strokeWidth={1} rx={1} />
+        {/* Półki widoczne */}
+        {shelfY.map((pos, i) => (
+          <g key={i}>
+            <rect x={offX + 3} y={offY + pos - 2} width={w - 6} height={4} fill={baseColor} stroke="#d6d3d1" strokeWidth={0.5} />
+          </g>
+        ))}
+      </g>
+    );
+  };
   
   return (
     <div className={`bg-gradient-to-b from-stone-50 to-stone-100 rounded-2xl ${compact ? 'p-2' : 'p-4 sm:p-5'} border border-stone-200`}>
@@ -389,26 +674,53 @@ const CabinetPreview = ({ config, materials, cabinets, options, compact = false 
         </defs>
         
         <g filter={`url(#sh${uid})`}>
+          {/* Nóżki */}
           {showLegs && leg?.id !== 'none' && leg?.id !== 'plinth' && legH > 0 && (
             <><rect x={offX + 4} y={offY + h} width={4} height={legH} fill="#a8a29e" rx={1} /><rect x={offX + w - 8} y={offY + h} width={4} height={legH} fill="#a8a29e" rx={1} /></>
           )}
           {showLegs && leg?.id === 'plinth' && legH > 0 && (
             <rect x={offX + 2} y={offY + h} width={w - 4} height={legH} fill={adjustColor(baseColor, -15)} stroke="#d6d3d1" strokeWidth={0.5} />
           )}
+          
+          {/* Plecy */}
           <rect x={offX - d + 1} y={offY - d + 1} width={w - 2} height={h - 2} fill="#fafaf9" stroke="#e7e5e4" strokeWidth={0.5} />
+          
+          {/* Bok lewy */}
           <polygon points={`${offX},${offY + h} ${offX},${offY} ${offX - d},${offY - d} ${offX - d},${offY + h - d}`} fill={`url(#sg${uid})`} stroke="#d6d3d1" strokeWidth={1} />
+          
+          {/* Góra */}
           <polygon points={`${offX},${offY} ${offX + w},${offY} ${offX + w - d},${offY - d} ${offX - d},${offY - d}`} fill={`url(#tg${uid})`} stroke="#d6d3d1" strokeWidth={1} />
-          <rect x={offX} y={offY} width={w} height={h} fill={`url(#fg${uid})`} stroke="#c7c2bc" strokeWidth={1} rx={1} />
           
-          {shelfY.map((pos, i) => (
-            <line key={i} x1={offX + 2} y1={offY + pos} x2={offX + w - 2} y2={offY + pos} stroke={adjustColor(frontColor, -20)} strokeWidth={1.5} strokeDasharray={hasFronts ? "4 2" : "0"} opacity={hasFronts ? 0.5 : 1} />
-          ))}
-          
-          {hasFronts && width > 500 && <line x1={offX + w/2} y1={offY + 2} x2={offX + w/2} y2={offY + h - 2} stroke="#a8a29e" strokeWidth={1.5} />}
-          {hasFronts && !compact && (width > 500 ? <><rect x={offX + w/2 - 18} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} /><rect x={offX + w/2 + 6} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} /></> : <rect x={offX + w - 18} y={offY + h/2 - 2} width={12} height={4} fill="#78716c" rx={2} />)}
+          {/* Front - w zależności od typu */}
+          {renderDrawers()}
+          {renderGlass()}
+          {renderHood()}
+          {renderOven()}
+          {renderFridge()}
+          {renderSink()}
+          {renderStandardDoors()}
+          {renderOpenCorpus()}
         </g>
         
-        {shelves > 0 && <><circle cx={offX + w - 8} cy={offY + 12} r={compact ? 6 : 8} fill="#92400e" /><text x={offX + w - 8} y={offY + (compact ? 14 : 16)} textAnchor="middle" fill="white" fontSize={compact ? 8 : 10} fontWeight="bold">{shelves}</text></>}
+        {/* Badge z liczbą szuflad lub półek */}
+        {(isDrawer ? drawerCount : shelves) > 0 && (
+          <>
+            <circle cx={offX + w - 8} cy={offY + 12} r={compact ? 6 : 8} fill="#92400e" />
+            <text x={offX + w - 8} y={offY + (compact ? 14 : 16)} textAnchor="middle" fill="white" fontSize={compact ? 8 : 10} fontWeight="bold">
+              {isDrawer ? drawerCount : shelves}
+            </text>
+          </>
+        )}
+        
+        {/* Ikona typu */}
+        {!compact && (isGlass || isOven || isFridge) && (
+          <g>
+            <circle cx={offX + 12} cy={offY + 12} r={8} fill="white" stroke="#d6d3d1" strokeWidth={1} />
+            <text x={offX + 12} y={offY + 16} textAnchor="middle" fontSize={10}>
+              {isGlass ? '🪟' : isOven ? '🔥' : '❄️'}
+            </text>
+          </g>
+        )}
       </svg>
       
       {!compact && (
